@@ -94,6 +94,23 @@ function getPlotlyThemeLayout() {
 let allStocksList = [];
 let chartTypeMode = "line";
 
+async function fetchApiJson(url) {
+  const response = await fetch(url);
+  let payload;
+
+  try {
+    payload = await response.json();
+  } catch (error) {
+    throw new Error(`The server returned an unreadable response (${response.status}).`);
+  }
+
+  if (!response.ok || payload.status !== "success") {
+    throw new Error(payload.message || `Request failed (${response.status}).`);
+  }
+
+  return payload;
+}
+
 async function loadInitialData() {
   await loadStockDropdowns();
   loadOverviewData();
@@ -136,31 +153,34 @@ let valuationChartInstance = null;
 let volumePieChartInstance = null;
 
 async function loadOverviewData() {
+  const tbody = document.getElementById("performersTableBody");
   try {
-    const res = await fetch("/api/overview");
-    const json = await res.json();
-    if (json.status === "success") {
-      const d = json.data;
-      document.getElementById("statTotalStocks").textContent = d.total_stocks;
-      document.getElementById("statTotalRecords").textContent = Number(d.total_records).toLocaleString();
-      document.getElementById("statDateRange").textContent = d.date_range;
-      document.getElementById("statAvgPrice").textContent = `₹${d.average_market_price.toLocaleString()}`;
-      document.getElementById("statTopPerformer").textContent = d.highest_performer.symbol;
-      document.getElementById("statTopReturn").textContent = `${d.highest_performer.return} Net Return`;
-      document.getElementById("statWorstPerformer").textContent = d.lowest_performer.symbol;
-      document.getElementById("statWorstReturn").textContent = `${d.lowest_performer.return} Net Return`;
-      document.getElementById("statTotalVolume").textContent = (d.total_market_volume / 1e9).toFixed(2) + " Billion";
-    }
+    const json = await fetchApiJson("/api/overview");
+    const d = json.data;
+    document.getElementById("statTotalStocks").textContent = d.total_stocks;
+    document.getElementById("statTotalRecords").textContent = Number(d.total_records).toLocaleString();
+    document.getElementById("statDateRange").textContent = d.date_range;
+    document.getElementById("statAvgPrice").textContent = `₹${d.average_market_price.toLocaleString()}`;
+    document.getElementById("statTopPerformer").textContent = d.highest_performer.symbol;
+    document.getElementById("statTopReturn").textContent = `${d.highest_performer.return} Net Return`;
+    document.getElementById("statWorstPerformer").textContent = d.lowest_performer.symbol;
+    document.getElementById("statWorstReturn").textContent = `${d.lowest_performer.return} Net Return`;
+    document.getElementById("statTotalVolume").textContent = (d.total_market_volume / 1e9).toFixed(2) + " Billion";
 
     // Load performers leaderboard
-    const perfRes = await fetch("/api/performers");
-    const perfJson = await perfRes.json();
-    if (perfJson.status === "success") {
-      renderPerformersTable(perfJson.top_performers.concat(perfJson.worst_performers));
-      renderOverviewCharts(perfJson.top_performers);
-    }
+    const perfJson = await fetchApiJson("/api/performers");
+    renderPerformersTable(perfJson.top_performers.concat(perfJson.worst_performers));
+    renderOverviewCharts(perfJson.top_performers);
   } catch (e) {
     console.error("Error loading overview data:", e);
+    tbody.innerHTML = "";
+    const row = document.createElement("tr");
+    const message = document.createElement("td");
+    message.colSpan = 8;
+    message.className = "overview-data-error";
+    message.textContent = `Dashboard data could not be loaded: ${e.message}`;
+    row.appendChild(message);
+    tbody.appendChild(row);
   }
 }
 
