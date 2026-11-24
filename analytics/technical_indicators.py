@@ -510,6 +510,7 @@ class TechnicalIndicators:
         result = self.df.copy()
 
         result["SMA_20"] = self.sma(period=20)
+        result["SMA_50"] = self.sma(period=50)
         result["EMA_20"] = self.ema(period=20)
         result["Daily_Return"] = self.daily_returns()
 

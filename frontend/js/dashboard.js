@@ -403,27 +403,33 @@ async function loadTrendIndicators() {
   const symbol = sel.value || "RELIANCE";
 
   try {
-    const res = await fetch(`/api/stock/${symbol}/indicators`);
-    const json = await res.json();
-    if (json.status === "success") {
-      const d = json.data;
-      const records = d.data;
-      const signals = d.signals;
-
-      // Update badge
-      const badge = document.getElementById("trendStateBadge");
-      badge.textContent = `${signals.trend_state} Trend`;
-      badge.className = `badge ${signals.trend_state === "Bullish" ? "badge-bullish" : signals.trend_state === "Bearish" ? "badge-bearish" : "badge-neutral"}`;
-
-      document.getElementById("rsiValueBadge").textContent = `RSI-14: ${signals.latest_rsi_14}`;
-
-      renderMovingAveragesPlot(records, symbol);
-      renderRsiPlot(records);
-      renderMacdPlot(records);
-      renderBollingerPlot(records, symbol);
+    const json = await fetchApiJson(`/api/stock/${symbol}/indicators`);
+    const d = json.data;
+    const records = d.data;
+    const signals = d.signals;
+    if (!records || records.length === 0) {
+      throw new Error(`No indicator data is available for ${symbol}.`);
     }
+
+    // Update badge
+    const badge = document.getElementById("trendStateBadge");
+    badge.textContent = `${signals.trend_state} Trend`;
+    badge.className = `badge ${signals.trend_state === "Bullish" ? "badge-bullish" : signals.trend_state === "Bearish" ? "badge-bearish" : "badge-neutral"}`;
+
+    document.getElementById("rsiValueBadge").textContent = `RSI-14: ${signals.latest_rsi_14}`;
+
+    renderMovingAveragesPlot(records, symbol);
+    renderRsiPlot(records);
+    renderMacdPlot(records);
+    renderBollingerPlot(records, symbol);
   } catch (e) {
     console.error("Failed to load trend indicators:", e);
+    ["maPlot", "rsiPlot", "macdPlot", "bollingerPlot"].forEach((plotId) => {
+      const plot = document.getElementById(plotId);
+      if (plot) {
+        plot.textContent = `Trend data could not be loaded: ${e.message}`;
+      }
+    });
   }
 }
 
@@ -477,8 +483,8 @@ function renderRsiPlot(records) {
 function renderMacdPlot(records) {
   const dates = records.map((r) => r.Date);
   const macd = records.map((r) => r.MACD);
-  const signal = records.map((r) => r.Signal_Line);
-  const hist = records.map((r) => r.MACD_Histogram);
+  const signal = records.map((r) => r.Signal);
+  const hist = records.map((r) => r.Histogram);
   const theme = getPlotlyThemeLayout();
 
   const traces = [

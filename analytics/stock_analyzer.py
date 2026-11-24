@@ -148,21 +148,30 @@ class StockAnalyzer:
 
         ti = TechnicalIndicators(stock_df)
         full_df = ti.calculate_all()
+        full_df = full_df.replace([np.inf, -np.inf], np.nan)
+        json_safe_df = full_df.astype(object).where(pd.notna(full_df), None)
         supp_res = ti.support_resistance()
         summary = self.get_stock_summary(symbol)
 
         # Extract latest indicator readings
         last_row = full_df.iloc[-1]
+        def finite_round(value, default):
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return default
+            return round(number, 2) if np.isfinite(number) else default
+
         signals = {
-            "latest_sma_20": round(float(last_row.get("SMA_20", 0)), 2),
-            "latest_sma_50": round(float(last_row.get("SMA_50", 0)), 2),
-            "latest_ema_20": round(float(last_row.get("EMA_20", 0)), 2),
-            "latest_rsi_14": round(float(last_row.get("RSI_14", 50)), 2),
-            "latest_macd": round(float(last_row.get("MACD", 0)), 2),
-            "latest_macd_signal": round(float(last_row.get("Signal_Line", 0)), 2),
-            "latest_macd_hist": round(float(last_row.get("MACD_Histogram", 0)), 2),
-            "bollinger_upper": round(float(last_row.get("BB_Upper", 0)), 2),
-            "bollinger_lower": round(float(last_row.get("BB_Lower", 0)), 2),
+            "latest_sma_20": finite_round(last_row.get("SMA_20", 0), 0),
+            "latest_sma_50": finite_round(last_row.get("SMA_50", 0), 0),
+            "latest_ema_20": finite_round(last_row.get("EMA_20", 0), 0),
+            "latest_rsi_14": finite_round(last_row.get("RSI_14", 50), 50),
+            "latest_macd": finite_round(last_row.get("MACD", 0), 0),
+            "latest_macd_signal": finite_round(last_row.get("Signal", 0), 0),
+            "latest_macd_hist": finite_round(last_row.get("Histogram", 0), 0),
+            "bollinger_upper": finite_round(last_row.get("BB_Upper", 0), 0),
+            "bollinger_lower": finite_round(last_row.get("BB_Lower", 0), 0),
             "trend_state": str(last_row.get("Trend", "Neutral")),
             "support_levels": supp_res.get("support", []),
             "resistance_levels": supp_res.get("resistance", [])
@@ -171,7 +180,7 @@ class StockAnalyzer:
         return {
             "summary": summary,
             "signals": signals,
-            "data": full_df.to_dict(orient="records")
+            "data": json_safe_df.to_dict(orient="records")
         }
 
 if __name__ == "__main__":
