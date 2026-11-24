@@ -63,8 +63,13 @@ class StockAnalyzer:
         ret_pct = ((end_price - start_price) / start_price * 100.0) if start_price > 0 else 0.0
 
         # Daily returns for volatility
-        daily_returns = sub["Close"].pct_change().dropna()
+        daily_returns = sub["Close"].pct_change()
+        # A zero or invalid close can produce infinite returns. Keep only
+        # finite observations so the volatility remains a valid JSON number.
+        daily_returns = daily_returns.replace([np.inf, -np.inf], np.nan).dropna()
         daily_std = float(daily_returns.std()) if len(daily_returns) > 1 else 0.0
+        if not np.isfinite(daily_std):
+            daily_std = 0.0
         annualized_vol = daily_std * np.sqrt(252) * 100.0
 
         return {
