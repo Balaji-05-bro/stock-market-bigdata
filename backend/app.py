@@ -10,6 +10,7 @@ import sys
 import glob
 import json
 import logging
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -59,6 +60,21 @@ def reset_analyzer():
     p = get_dataset_path()
     if p.exists():
         _analyzer_cache = StockAnalyzer(p)
+
+
+def send_generated_file(download_name, suffix, writer):
+    """Write a download to ephemeral storage instead of the read-only app bundle."""
+    file_descriptor, temp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(file_descriptor)
+    try:
+        writer(Path(temp_path))
+        response = send_file(temp_path, as_attachment=True, download_name=download_name)
+        response.call_on_close(lambda: os.path.exists(temp_path) and os.remove(temp_path))
+        return response
+    except Exception:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
 
 app = Flask(
     __name__,
@@ -409,15 +425,20 @@ def api_download_report(report_type):
 
         gen = ReportGenerator(analyzer)
         if report_type.lower() == "csv":
-            path = gen.generate_csv_report()
-            return send_file(path, as_attachment=True, download_name="stock_market_analytics_report.csv")
+            return send_generated_file(
+                "stock_market_analytics_report.csv", ".csv", gen.generate_csv_report
+            )
         elif report_type.lower() == "pdf":
-            path = gen.generate_pdf_report()
-            return send_file(path, as_attachment=True, download_name="stock_market_analytics_report.pdf")
+            return send_generated_file(
+                "stock_market_analytics_report.pdf", ".pdf", gen.generate_pdf_report
+            )
         elif report_type.lower() == "comparison":
             symbols = [s["Symbol"] for s in analyzer.get_symbols()]
-            path = gen.generate_stock_comparison(symbols)
-            return send_file(path, as_attachment=True, download_name="stock_comparison.csv")
+            return send_generated_file(
+                "stock_comparison.csv",
+                ".csv",
+                lambda output_path: gen.generate_stock_comparison(symbols, output_path),
+            )
         else:
             return jsonify({"status": "error", "message": f"Unknown report type '{report_type}'"}), 400
     except Exception as e:
@@ -435,12 +456,11 @@ def api_export_symbol(symbol):
         if df.empty:
             return jsonify({"status": "error", "message": f"Symbol {symbol} not found"}), 404
 
-        export_dir = PROJECT_ROOT / "reports" / "exports"
-        export_dir.mkdir(parents=True, exist_ok=True)
-        export_path = export_dir / f"{symbol.upper()}_data.csv"
-        df.to_csv(export_path, index=False)
-
-        return send_file(export_path, as_attachment=True, download_name=f"{symbol.upper()}_historical_data.csv")
+        return send_generated_file(
+            f"{symbol.upper()}_historical_data.csv",
+            ".csv",
+            lambda output_path: df.to_csv(output_path, index=False),
+        )
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
